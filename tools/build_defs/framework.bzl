@@ -65,7 +65,7 @@ CC_EXTERNAL_RULE_ATTRIBUTES = {
     "tools_deps": attr.label_list(mandatory = False, allow_files = True, default = []),
     #
     # Optional name of the output subdirectory with the header files, defaults to 'include'.
-    "out_include_dir": attr.string(mandatory = False, default = "include"),
+    "out_include_dirs": attr.string_list(mandatory = False, default = ["include"]),
     # Optional name of the output subdirectory with the library files, defaults to 'lib'.
     "out_lib_dir": attr.string(mandatory = False, default = "lib"),
     # Optional name of the output subdirectory with the binary files, defaults to 'bin'.
@@ -287,7 +287,7 @@ def cc_external_rule_impl(ctx, attrs):
         gen_dir = installdir_copy.file,
         bin_dir_name = attrs.out_bin_dir,
         lib_dir_name = attrs.out_lib_dir,
-        include_dir_name = attrs.out_include_dir,
+        include_dir_name = attrs.out_include_dirs,
     )
     output_groups = _declare_output_groups(installdir_copy.file, outputs.out_binary_files)
     wrapped_files = [
@@ -474,7 +474,7 @@ def _check_file_name(var):
 _Outputs = provider(
     doc = "Provider to keep different kinds of the external build output files and directories",
     fields = dict(
-        out_include_dir = "Directory with header files (relative to install directory)",
+        out_include_dirs = "Directories with header files (relative to install directory)",
         out_binary_files = "Binary files, which will be created by the action",
         libraries = "Library files, which will be created by the action",
         declared_outputs = "All output files and directories of the action",
@@ -494,7 +494,9 @@ def _define_outputs(ctx, attrs, lib_name):
 
     _check_file_name(lib_name)
 
-    out_include_dir = ctx.actions.declare_directory(lib_name + "/" + attrs.out_include_dir)
+    out_include_dirs = []
+    for include_dir in attrs.out_include_dirs:
+        out_include_dirs.append(ctx.actions.declare_directory(lib_name + "/" + include_dir))
 
     out_binary_files = _declare_out(ctx, lib_name, attrs.out_bin_dir, attrs.binaries)
 
@@ -503,12 +505,12 @@ def _define_outputs(ctx, attrs, lib_name):
         shared_libraries = _declare_out(ctx, lib_name, attrs.out_lib_dir, attrs.shared_libraries),
         interface_libraries = _declare_out(ctx, lib_name, attrs.out_lib_dir, attrs.interface_libraries),
     )
-    declared_outputs = [out_include_dir] + out_binary_files
+    declared_outputs = out_include_dirs + out_binary_files
     declared_outputs += libraries.static_libraries
     declared_outputs += libraries.shared_libraries + libraries.interface_libraries
 
     return _Outputs(
-        out_include_dir = out_include_dir,
+        out_include_dirs = out_include_dirs,
         out_binary_files = out_binary_files,
         libraries = libraries,
         declared_outputs = declared_outputs,
@@ -637,8 +639,8 @@ def _get_headers(compilation_info):
 
 def _define_out_cc_info(ctx, attrs, inputs, outputs):
     compilation_info = cc_common.create_compilation_context(
-        headers = depset([outputs.out_include_dir]),
-        system_includes = depset([outputs.out_include_dir.path]),
+        headers = depset(outputs.out_include_dirs),
+        system_includes = depset([include_dir.path for include_dir in outputs.out_include_dirs]),
         includes = depset([]),
         quote_includes = depset([]),
         defines = depset(attrs.defines),
